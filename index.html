@@ -83,9 +83,9 @@ header p { margin: 0; font-size: 14px; color: var(--mute); letter-spacing: .06em
   <div class="bar">
     <button id="btn-music" type="button">音樂：開</button>
     <button id="btn-full" type="button">全螢幕</button>
-    <span class="hint">點畫面或按空白鍵跳，按久一點跳更高。手機橫放比較好玩。</span>
+    <span class="hint">小魔法師：點左半邊跳、右半邊放魔法星星（鍵盤：空白鍵跳、X 放星星）。手機橫放比較好玩。</span>
   </div>
-  <p class="credit">角色和故事：<b>小里肌（8 歲）</b>・上色和補畫動作：Gemini・遊戲程式：Claude</p>
+  <p class="credit">角色和故事：<b>小里肌（8 歲）</b>・主角小魔法師：小里肌本人（蠟筆風）・上色和補畫動作：Gemini・遊戲程式：Claude</p>
 </main>
 
 <script>
@@ -109,7 +109,8 @@ const stage = document.getElementById('stage');
 // ---------- 素材 ----------
 const NAMES = ['kk_1','kk_2','kk_3','kk_4','kk_5','kk_front','mon_1','mon_2','mon_3','mon_4','monster_front',
   'rongrong','jiaojiao','dog','fish','heart','star','ghost','pumpkin','crate',
-  'keli_1','keli_2','keli_3','keli_4','keli_5','bear_1','bear_2','bear_3','bear_4','jiao_1','jiao_2','jiao_3','candle','spirit','circle'];
+  'keli_1','keli_2','keli_3','keli_4','keli_5','bear_1','bear_2','bear_3','bear_4','jiao_1','jiao_2','jiao_3','candle','spirit','circle',
+  'wiz_stand','wiz_w1','wiz_w2','wiz_jump','wiz_hurt','wiz_wave','wiz_cast','magic_star','item_book','item_vase','item_box'];
 const IMG = {};
 function loadImg(src) {
   return new Promise(res => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; });
@@ -126,7 +127,11 @@ const HERO = {
   kk: { stand: 'kk_1', w1: 'kk_2', w2: 'kk_3', jump: 'kk_4', hurt: 'kk_5', icon: 'kk_front' },
   keli: { stand: 'keli_1', w1: 'keli_2', w2: 'keli_3', jump: 'keli_4', hurt: 'keli_5', icon: 'keli_1' },
 };
-const hero = () => HERO[lvl === 3 ? 'keli' : 'kk'];
+HERO.wiz = { stand: 'wiz_stand', w1: 'wiz_w1', w2: 'wiz_w2', jump: 'wiz_jump', hurt: 'wiz_hurt', icon: 'wiz_wave', cast: 'wiz_cast' };
+// 主角可以選小魔法師（預設，可以放魔法星星）或原本的貓咪
+let heroChoice = store('kk_hero') === 'cat' ? 'cat' : 'wiz';
+const isWiz = () => heroChoice === 'wiz';
+const hero = () => isWiz() ? HERO.wiz : HERO[lvl === 3 ? 'keli' : 'kk'];
 let muted = store('kk_muted') === '1';
 
 // ---------- 音效（WebAudio 合成） ----------
@@ -180,6 +185,8 @@ function buildLevel(n) {
   const star = (x, y) => L.push({ t: 'star', x, y, r: 30 });
   const heart = (x, y) => L.push({ t: 'heart', x, y, r: 26 });
   const pit = x => L.push({ t: 'pit', x, w: 120 });
+  // 魔術道具（小魔法師才有）：book 畫冊、vase 紅球花瓶、box 魔術盒
+  const magic = (x, kind) => { if (isWiz()) L.push({ t: 'magic', kind, x, y: GROUND - 190, r: 34 }); };
   const candle = x => L.push({ t: 'candle', x, w: 40, h: 74 });
   const circle = x => L.push({ t: 'circle', x });
   const spirit = (x, y = GROUND - 215) => L.push({ t: 'ghost', kind: 'spirit', x, y0: y, ph: x % 5 });
@@ -203,6 +210,7 @@ function buildLevel(n) {
     pumpkin(9350); ghost(9680);
     star(10050, GROUND - 190);
     row(10250, 5);
+    magic(2300, 'box'); magic(6100, 'vase'); magic(8500, 'book');
   } else if (n === 3) {
     // 第 3 關：蠟燭、魔法陣、紫色附身怪，最後和變成怪物熊的容容對決
     row(800, 5);
@@ -217,6 +225,7 @@ function buildLevel(n) {
     spirit(7550); row(7450, 6);
     pit(8050); star(8050, GROUND - 250);
     mon(8650, true); star(9200, GROUND - 200); row(9400, 4);
+    magic(2000, 'vase'); magic(6150, 'book'); magic(9450, 'box');
   } else {
     // 第 2 關：地板有破洞、怪物貓會跳，最後大狗出場
     row(800, 5);
@@ -235,6 +244,7 @@ function buildLevel(n) {
     mon(10150); mon(10400, true);
     star(10900, GROUND - 200);
     row(11150, 5);
+    magic(4100, 'vase'); magic(6000, 'book'); magic(9950, 'box');
   }
   return L;
 }
@@ -245,10 +255,12 @@ let P, level, camX = 0, fishN = 0, starN = 0, stomps = 0, hearts = 3, score = 0,
 let particles = [], popups = [], flash = 0, nextFlash = 4;
 let holding = false, totalT = 0;
 let B = null; // 第 3 關的魔王（怪物熊容容）
+let shots = []; // 小魔法師的魔法星星
 
 function reset(n = lvl) {
   lvl = n; SPEED = LEVELS[n].speed; END = LEVELS[n].end; falls = 0;
-  P = { x: 0, y: GROUND, vy: 0, onGround: true, inv: 0, hurtT: 0, coyote: 0, buffer: 0, walkT: 0, prevY: GROUND };
+  P = { x: 0, y: GROUND, vy: 0, onGround: true, inv: 0, hurtT: 0, coyote: 0, buffer: 0, walkT: 0, prevY: GROUND, castT: 0, cool: 0, ghostT: 0, tripleT: 0 };
+  shots = [];
   level = buildLevel(n); camX = 0; fishN = 0; starN = 0; stomps = 0; hearts = 3; score = 0;
   particles = []; popups = []; flash = 0; nextFlash = 5; B = null;
 }
@@ -260,6 +272,9 @@ function setState(s) { state = s; stateT = 0; }
 function press(px, py) {
   audioOn();
   if (state === 'title') {
+    if (px != null && px < 300 && py < 76) {
+      heroChoice = isWiz() ? 'cat' : 'wiz'; store('kk_hero', heroChoice); SFX.fish(); return;
+    }
     // 標題畫面：點第 2、3 關按鈕（已解鎖）就玩那一關，其他地方都是第 1 關
     let pick = 1;
     if (px != null && py > 430) pick = px < W / 2 - 115 ? 1 : px < W / 2 + 115 ? 2 : 3;
@@ -271,7 +286,10 @@ function press(px, py) {
     return;
   }
   if (state === 'over' && stateT > 1.0) { reset(lvl); setState('play'); return; }
-  if (state === 'play') { holding = true; P.buffer = 0.13; }
+  if (state === 'play') {
+    if (isWiz() && px != null && px > W / 2) { shoot(); return; }
+    holding = true; P.buffer = 0.13;
+  }
 }
 function release() {
   holding = false;
@@ -288,6 +306,7 @@ window.addEventListener('keydown', e => {
   if (['Space', 'ArrowUp', 'KeyW', 'Enter'].includes(e.code)) { e.preventDefault(); if (!e.repeat) press(); }
   else if (e.code === 'Digit2' && state === 'title') press(W / 2, 480);
   else if (e.code === 'Digit3' && state === 'title') press(W - 100, 480);
+  else if (['KeyX', 'KeyF', 'ArrowRight'].includes(e.code) && state === 'play' && isWiz()) { e.preventDefault(); if (!e.repeat) shoot(); }
 });
 window.addEventListener('keyup', e => { if (['Space', 'ArrowUp', 'KeyW', 'Enter'].includes(e.code)) release(); });
 
@@ -321,6 +340,69 @@ function sparkle(x, y, color, n = 10) {
 }
 function popup(x, y, text, color = '#fff6c9') { popups.push({ x, y, text, color, life: 0.9 }); }
 
+// ---------- 魔術道具 ----------
+const POWER_NAME = { book: '魔術畫冊：怪物都變成畫了！', vase: '紅球消失術：隱身 5 秒！', box: '魔術盒：三連發星星 6 秒！' };
+function usePower(kind, x, y) {
+  score += 50; SFX.star(); popup(x, y - 40, POWER_NAME[kind], '#ffe27a');
+  if (kind === 'vase') { P.ghostT = 5; P.inv = Math.max(P.inv, 5); sparkle(P.x, P.y - 60, '#ff6b6b', 20); }
+  if (kind === 'box') { P.tripleT = 6; sparkle(P.x, P.y - 60, '#ffe27a', 20); }
+  if (kind === 'book') {
+    flash = Math.max(flash, 0.6);
+    for (const e of level) {
+      if (e.dead || e.x < camX - 40 || e.x > camX + W + 40) continue;
+      if (e.t === 'mon' && e.state === 'walk') { e.state = 'dizzy'; e.vy = -500; e.vx = 140; stomps++; score += 30; sparkle(e.x, e.y - 60, '#ffffff', 12); popup(e.x, e.y - 130, '變成畫！', '#fff'); }
+      if (e.t === 'ghost' && !e.hit) { e.dead = true; score += 30; sparkle(e.x, e.y0, '#ffffff', 12); }
+    }
+    for (let i = 0; i < 14; i++) particles.push({ x: camX + Math.random() * W, y: 80 + Math.random() * 300, vx: (Math.random() - .5) * 120, vy: 60 + Math.random() * 80,
+      life: 1.6, c: '#fffdf2', s: 14, confetti: true });
+  }
+}
+
+// ---------- 魔法星星 ----------
+function shoot() {
+  if (P.cool > 0 || P.inPit) return;
+  P.cool = 0.32; P.castT = 0.25;
+  const spread = P.tripleT > 0 ? [-170, 0, 170] : [0];
+  for (const vy of spread) shots.push({ x: P.x + 46, y: P.y - 84, vy, life: 1.2 });
+  tone('triangle', 900, 1500, 0.12, 0.12); tone('sine', 1800, 2400, 0.1, 0.06, 0.05);
+}
+function updateShots(dt) {
+  for (const s of shots) {
+    s.x += 780 * dt; s.y += (s.vy || 0) * dt; s.life -= dt;
+    if (Math.random() < 0.6) particles.push({ x: s.x - 30, y: s.y + (Math.random() - .5) * 16, vx: -60, vy: (Math.random() - .5) * 40,
+      life: 0.35, c: ['#ffe27a', '#ff9fb0', '#9be3ff', '#c58bff'][Math.floor(Math.random() * 4)], s: 5, confetti: true });
+    if (s.x > camX + W + 60) s.life = 0;
+    const box = { l: s.x - 22, r: s.x + 22, t: s.y - 18, b: s.y + 18 };
+    for (const e of level) {
+      if (s.life <= 0) break;
+      if (e.dead || Math.abs(e.x - s.x) > 90) continue;
+      if (e.t === 'mon' && e.state === 'walk' && overlap(box, { l: e.x - 30, r: e.x + 30, t: e.y - 108, b: e.y })) {
+        e.state = 'dizzy'; e.vy = -420; e.vx = 220; stomps++; score += 30; s.life = 0;
+        SFX.stomp(); sparkle(e.x, e.y - 60, '#ffe27a', 14); popup(e.x, e.y - 120, '+30');
+      } else if (e.t === 'ghost' && !e.hit) {
+        const gy = e.y0 + Math.sin(totalT * 2.4 + e.ph) * (e.kind === 'spirit' ? 38 : 22);
+        if (overlap(box, { l: e.x - 26, r: e.x + 26, t: gy - 30, b: gy + 30 })) {
+          e.dead = true; score += 30; s.life = 0; SFX.star(); sparkle(e.x, gy, e.kind === 'spirit' ? '#c58bff' : '#ffffff', 16); popup(e.x, gy - 30, '+30');
+        }
+      } else if (e.t === 'candle' && !e.hit && overlap(box, { l: e.x - 16, r: e.x + 16, t: GROUND - e.h - 20, b: GROUND })) {
+        e.hit = true; s.life = 0; sparkle(e.x, GROUND - e.h, '#cfd8ff', 10); popup(e.x, GROUND - e.h - 30, '熄滅！', '#cfe6ff');
+      } else if (e.t === 'crate' && overlap(box, { l: e.x - e.w / 2, r: e.x + e.w / 2, t: GROUND - e.h, b: GROUND })) {
+        s.life = 0; sparkle(s.x, s.y, '#ffe27a', 6);
+      }
+    }
+    if (s.life > 0 && B && B.hp > 0 && ['charge', 'roar', 'enter', 'back'].includes(B.mode)
+        && overlap(box, { l: B.x - 40, r: B.x + 40, t: B.y - BOSS_H, b: B.y })) {
+      s.life = 0; B.hp = Math.round((B.hp - 0.34) * 100) / 100; B.flash = 0.15; score += 40;
+      SFX.stomp(); sparkle(B.x, B.y - 90, '#c58bff', 12);
+      if (B.hp <= 0.01) {
+        B.hp = 0; B.mode = 'free'; B.t = 0; SFX.star();
+        particles.push({ x: B.x, y: B.y - BOSS_H, vx: 160, vy: -260, life: 2.2, spirit: true, s: 0 });
+      }
+    }
+  }
+  shots = shots.filter(s => s.life > 0);
+}
+
 // ---------- 更新 ----------
 function update(dt) {
   totalT += dt; stateT += dt;
@@ -347,6 +429,9 @@ function updatePlay(dt) {
   camX = Math.min(P.x - PX, END - PX);
   P.inv = Math.max(0, P.inv - dt); P.hurtT = Math.max(0, P.hurtT - dt);
   P.buffer -= dt; P.coyote = P.onGround ? 0.1 : P.coyote - dt; P.walkT += dt;
+  P.cool = Math.max(0, P.cool - dt); P.castT = Math.max(0, P.castT - dt);
+  P.ghostT = Math.max(0, P.ghostT - dt); P.tripleT = Math.max(0, P.tripleT - dt);
+  updateShots(dt);
   if (P.buffer > 0 && P.coyote > 0) { P.vy = JUMP_V; P.onGround = false; P.coyote = 0; P.buffer = 0; SFX.jump(); if (!holding) P.vy = CUT_V * 1.6; }
 
   P.prevY = P.y;
@@ -405,6 +490,7 @@ function updatePlay(dt) {
         e.dead = true;
         if (e.t === 'fish') { fishN++; score += 10; SFX.fish(); sparkle(e.x, cy, '#dfe9f2', 6); popup(e.x, cy - 20, '+10'); }
         if (e.t === 'star') { starN++; score += 100; SFX.star(); sparkle(e.x, cy, '#f6c453', 22); popup(e.x, cy - 24, '星星 +100', '#ffe27a'); }
+        if (e.t === 'magic') usePower(e.kind, e.x, cy);
         if (e.t === 'heart') { hearts = Math.min(5, hearts + 1); SFX.heart(); sparkle(e.x, cy, '#ff6b81', 14); popup(e.x, cy - 24, '+1 愛心', '#ff9fb0'); }
       }
     }
@@ -431,7 +517,7 @@ function startBoss() {
   popup(END + 60, GROUND - 230, '怪物熊來了！', '#ffb3c7');
 }
 function updateBoss(dt) {
-  B.t += dt; B.anim += dt;
+  B.t += dt; B.anim += dt; B.flash = Math.max(0, (B.flash || 0) - dt);
   const home = END + BOSS_HOME, left = camX - 180;
   if (B.mode === 'enter') { B.x -= 260 * dt; if (B.x <= home) { B.x = home; B.mode = 'roar'; B.t = 0; SFX.thunder(); } }
   else if (B.mode === 'roar') { if (B.t > (B.hp === 3 ? 1.3 : 0.9)) { B.mode = 'charge'; B.t = 0; } }
@@ -545,6 +631,11 @@ function drawEntities() {
         ctx.fillStyle = '#ffe27a'; ctx.beginPath(); ctx.arc(sx, cy, 40, 0, Math.PI * 2); ctx.fill(); ctx.restore();
         drawImg(IMG.star, sx, cy + 30, 60, { rot: Math.sin(totalT * 2) * 0.2 });
       } else if (e.t === 'heart') drawImg(IMG.heart, sx, cy + 24, 48, { sy: 1 + Math.sin(totalT * 8) * 0.06 });
+      else if (e.t === 'magic') {
+        ctx.save(); ctx.globalAlpha = 0.35 + 0.2 * Math.sin(totalT * 5);
+        ctx.fillStyle = '#c58bff'; ctx.beginPath(); ctx.arc(sx, cy, 46, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+        drawImg(IMG['item_' + e.kind], sx, cy + 34, 68, { rot: Math.sin(totalT * 3) * 0.1 });
+      }
       else drawImg(IMG.fish, sx, cy + 16, 32);
     }
   }
@@ -620,22 +711,29 @@ function drawLevel3End() {
 
 function drawPlayer() {
   const sx = P.x - camX;
-  if (P.inv > 0 && state === 'play' && Math.floor(P.inv * 12) % 2) return;
+  if (P.inv > 0 && P.ghostT <= 0 && state === 'play' && Math.floor(P.inv * 12) % 2) return;
   let im;
   const h = hero();
   if (state === 'over' || P.hurtT > 0) im = IMG[h.hurt];
   else if (state === 'win') im = IMG[lvl === 3 ? h.stand : h.jump];
-  else if (!P.onGround) im = IMG[h.jump];
+  else if (!P.onGround) im = P.castT > 0 && h.cast ? IMG[h.cast] : IMG[h.jump];
   else if (B && P.x >= END) im = IMG[h.stand];
+  else if (P.castT > 0 && h.cast) im = IMG[h.cast];
   else im = Math.floor(P.walkT * 8) % 2 ? IMG[h.w1] : IMG[h.w2];
   let bottom = P.y;
   if (state === 'win') bottom = GROUND - Math.abs(Math.sin(stateT * 6 + 0.7)) * 36;
   const tilt = P.onGround && state === 'play' ? Math.sin(P.walkT * 16) * 0.04 : 0;
-  drawImg(im, sx, bottom + 2, CHAR_H, { rot: tilt });
+  drawImg(im, sx, bottom + 2, CHAR_H, { rot: tilt, alpha: P.ghostT > 0 ? 0.4 + 0.15 * Math.sin(totalT * 10) : undefined });
 }
 
 function drawHUD() {
   for (let i = 0; i < hearts; i++) drawImg(IMG.heart, 34 + i * 38, 52, 32);
+  const pw = P.ghostT > 0 ? ['item_vase', P.ghostT / 5] : P.tripleT > 0 ? ['item_box', P.tripleT / 6] : null;
+  if (pw && state === 'play') {
+    drawImg(IMG[pw[0]], 36, 112, 40);
+    ctx.save(); ctx.fillStyle = 'rgba(255,255,255,.3)'; roundRect(62, 90, 110, 12, 6); ctx.fill();
+    ctx.fillStyle = '#ffe27a'; roundRect(62, 90, 110 * pw[1], 12, 6); ctx.fill(); ctx.restore();
+  }
   // 進度條：顆顆 → 容容
   const bx = 330, bw = 300, by = 30, prog = Math.min(1, P.x / END);
   ctx.save();
@@ -647,7 +745,7 @@ function drawHUD() {
   drawImg(lvl === 3 ? IMG.bear_1 : IMG.rongrong, bx + bw + 24, by + 20, 40);
   if (B && B.hp > 0) {
     text('怪物熊', W / 2 - 90, 92, 24, '#ffd1e0', { stroke: 6 });
-    for (let i = 0; i < 3; i++) drawImg(IMG.spirit, W / 2 - 20 + i * 48, 118, 50, { alpha: i < B.hp ? 1 : 0.18 });
+    for (let i = 0; i < 3; i++) drawImg(IMG.spirit, W / 2 - 20 + i * 48, 118, 50, { alpha: i < Math.ceil(B.hp - 0.01) ? (i < Math.floor(B.hp + 0.01) ? 1 : 0.55) : 0.18 });
   }
   // 右上：魚乾、星星
   drawImg(IMG.fish, W - 262, 50, 26);
@@ -668,11 +766,15 @@ function drawTitle() {
   const bob = Math.sin(totalT * 3) * 8;
   text('顆顆闖鬼屋', W / 2, 108, 76, '#f6c453', { stroke: 12 });
   text('小里肌的漫畫小遊戲・共 3 關', W / 2, 170, 24, '#efe6ff', { stroke: 6 });
-  drawImg(IMG.kk_front, 150, 420 + bob * 0.3, 200, { rot: Math.sin(totalT * 2.4) * 0.05 });
+  drawImg(isWiz() ? IMG.wiz_wave : IMG.kk_front, 150, 420 + bob * 0.3, 210, { rot: Math.sin(totalT * 2.4) * 0.05 });
+  ctx.save(); ctx.fillStyle = 'rgba(255,250,236,.92)'; ctx.strokeStyle = '#1b1530'; ctx.lineWidth = 4;
+  roundRect(16, 16, 280, 52, 26); ctx.fill(); ctx.stroke(); ctx.restore();
+  text('主角：' + (isWiz() ? '小魔法師' : '貓咪') + '　點這裡換', 156, 42, 20, '#3a2a58', { stroke: 0 });
   drawImg(IMG.monster_front, 815, 420, 180, { rot: Math.sin(totalT * 1.7) * 0.08 });
   drawImg(IMG.ghost, 690, 240 + bob, 80, { alpha: 0.85 });
   panel(390, 228, 250, 150);
-  const lines = ['點一下就跳', '按久一點跳更高', '踩怪物貓的頭', '收集 3 顆星星', '去找容容！'];
+  const lines = isWiz() ? ['點左半邊：跳', '點右半邊：魔法星星', '按久一點跳更高', '收集 3 顆星星', '去找容容！']
+    : ['點一下就跳', '按久一點跳更高', '踩怪物貓的頭', '收集 3 顆星星', '去找容容！'];
   lines.forEach((s, i) => text(s, 515, 252 + i * 26, 19, '#3a2a58', { stroke: 0, weight: 700 }));
   levelButton(W / 2 - 230, 1, true);
   levelButton(W / 2, 2, unlocked2);
@@ -690,6 +792,18 @@ function levelButton(cx, n, open) {
   ctx.restore();
   if (open) text('第 ' + n + ' 關　開始', cx, 480 - pulse * 3, 26, '#2b1a10', { stroke: 0 });
   else { text('第 ' + n + ' 關', cx, 470, 22, '#d6cbf0', { stroke: 0 }); text('過第 ' + (n - 1) + ' 關解鎖', cx, 494, 15, '#b4a6d4', { stroke: 0, weight: 700 }); }
+}
+
+function drawControlsHint() {
+  if (!isWiz() || state !== 'play' || stateT > 4.5) return;
+  const a = Math.min(1, (4.5 - stateT) / 0.8) * 0.85;
+  ctx.save(); ctx.globalAlpha = a; ctx.setLineDash([10, 8]); ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(W / 2, 150); ctx.lineTo(W / 2, H - 20); ctx.stroke(); ctx.restore();
+  ctx.save(); ctx.globalAlpha = a;
+  text('點這邊：跳', W / 4, 300, 30, '#fff', { stroke: 7 });
+  text('點這邊：魔法星星', W * 0.75, 300, 30, '#ffe27a', { stroke: 7 });
+  text('鍵盤：空白鍵跳、X 鍵放星星', W / 2, H - 40, 18, '#efe6ff', { stroke: 5 });
+  ctx.restore();
 }
 
 function drawBanner() {
@@ -730,7 +844,11 @@ function drawOver() {
 function render() {
   ctx.clearRect(0, 0, W, H);
   drawBg();
-  if (state !== 'title') { drawEntities(); drawFriends(); drawPlayer(); }
+  if (state !== 'title') {
+    drawEntities(); drawFriends(); drawPlayer();
+    for (const s of shots) drawImg(IMG.magic_star, s.x - camX, s.y + 28, 56, { rot: Math.sin(totalT * 20) * 0.08 });
+    drawControlsHint();
+  }
   for (const p of particles) {
     ctx.save(); ctx.globalAlpha = Math.min(1, p.life * 2); ctx.fillStyle = p.c;
     ctx.translate(p.x - camX, p.y);
@@ -773,6 +891,7 @@ async function boot(data) {
   if (data && data.bests) { bests[1] = Math.max(bests[1], data.bests[1] || 0); bests[2] = Math.max(bests[2], data.bests[2] || 0); }
   if (data && data.unlocked2) unlocked2 = true;
   if (data && data.unlocked3) unlocked3 = true;
+  if (data && data.heroChoice) heroChoice = data.heroChoice;
   if (data && data.bests) bests[3] = Math.max(bests[3], data.bests[3] || 0);
   resize();
   ctx.fillStyle = '#2b2046'; ctx.fillRect(0, 0, W, H);
@@ -792,7 +911,7 @@ async function boot(data) {
   requestAnimationFrame(loop);
 }
 const hot = window.claude && window.claude.hot;
-if (hot && typeof hot.snapshot === 'function') hot.snapshot(() => ({ bests, unlocked2, unlocked3 }));
+if (hot && typeof hot.snapshot === 'function') hot.snapshot(() => ({ bests, unlocked2, unlocked3, heroChoice }));
 if (hot && typeof hot.ready === 'function') hot.ready(boot); else boot((hot && hot.data) || {});
 })();
 </script>
