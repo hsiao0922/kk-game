@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -26,6 +26,7 @@
 }
 html, body { height: 100%; margin: 0; }
 * { box-sizing: border-box; }
+body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
 body {
   background: var(--night);
   color: var(--ink);
@@ -52,7 +53,8 @@ header p { margin: 0; font-size: 14px; color: var(--mute); letter-spacing: .06em
   background: var(--plum);
   box-shadow: 0 0 0 3px var(--plum-line), 0 18px 50px rgba(0,0,0,.45);
 }
-.stage canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: pointer; }
+.stage, .stage canvas { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.stage canvas { display: block; width: 100%; height: 100%; cursor: pointer; }
 .stage:fullscreen { max-width: none; width: 100vw; height: 100vh; border-radius: 0; display: grid; place-items: center; background: #000; box-shadow: none; }
 .stage:fullscreen canvas { width: min(100vw, calc(100vh * 16 / 9)); height: auto; aspect-ratio: 16 / 9; }
 /* iPhone 等不支援全螢幕 API 時：讓遊戲畫面鋪滿整個視窗 */
@@ -105,7 +107,7 @@ body.pseudo-full .exit-full {
   <div class="bar">
     <button id="btn-music" type="button">音樂：開</button>
     <button id="btn-full" type="button">全螢幕</button>
-    <span class="hint">電腦：A D 或方向鍵走、空白鍵跳、滑鼠左鍵放魔法星星。手機平板：左下十字鍵、右下跳和魔法按鈕，橫放比較好玩。</span>
+    <span class="hint">電腦：A D 或方向鍵走、空白鍵跳、滑鼠左鍵放魔法星星。手機平板：左半邊按住拖曳走路、右下跳和魔法按鈕，橫放比較好玩。</span>
   </div>
   <p class="credit">角色和故事：<b>小里肌（8 歲）</b>・主角小魔法師：小里肌本人（蠟筆風）・上色和補畫動作：Gemini・遊戲程式：Claude</p>
 </main>
@@ -317,15 +319,14 @@ function release() {
 }
 
 // 操作：桌機 A/D 或 ←/→ 移動、空白鍵/W/↑ 跳、滑鼠左鍵（按住連發）放魔法星星；
-// 手機平板：左下十字鍵移動（上 = 跳），右下「跳」「魔法」按鈕，可以多指同時按
+// 手機平板：左半邊按住拖曳就出現圓形搖桿（往上推 = 跳），右下「跳」「魔法」按鈕一直顯示，可以多指同時按
 const keys = { left: false, right: false };
 const touchHeld = new Map(); // pointerId → 按鈕名稱
 let mouseFire = false, keyFire = false;
 let touchUI = window.matchMedia?.('(pointer: coarse)').matches || 'ontouchstart' in window;
-const BTN = {
-  left: { x: 78, y: 448, r: 46 }, right: { x: 222, y: 448, r: 46 }, up: { x: 150, y: 378, r: 42 }, down: { x: 150, y: 512, r: 34 },
-  attack: { x: 760, y: 462, r: 50 }, jump: { x: 876, y: 420, r: 60 },
-};
+const BTN = { attack: { x: 760, y: 462, r: 50 }, jump: { x: 876, y: 420, r: 60 } };
+const STICK_R = 70;
+let stick = null; // { id, ox, oy, x, y, jumped }
 function hitButton(px, py) {
   for (const k in BTN) {
     if (k === 'attack' && !isWiz()) continue;
@@ -334,8 +335,9 @@ function hitButton(px, py) {
   return null;
 }
 const held = name => [...touchHeld.values()].includes(name);
-const inputLeft = () => keys.left || held('left');
-const inputRight = () => keys.right || held('right');
+const stickDX = () => stick ? stick.x - stick.ox : 0;
+const inputLeft = () => keys.left || stickDX() < -16;
+const inputRight = () => keys.right || stickDX() > 16;
 const wantFire = () => isWiz() && (mouseFire || keyFire || held('attack'));
 function toLocal(e) { const r = canvas.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * W, (e.clientY - r.top) / r.height * H]; }
 canvas.addEventListener('contextmenu', e => e.preventDefault());
@@ -346,26 +348,37 @@ canvas.addEventListener('pointerdown', e => {
   audioOn();
   if (e.pointerType === 'mouse') { if (e.button === 0 && isWiz()) { mouseFire = true; shoot(); } return; }
   touchUI = true;
-  const b = hitButton(px, py); if (!b) return;
+  const b = hitButton(px, py);
+  if (!b) {
+    if (px < W * 0.6 && !stick) { stick = { id: e.pointerId, ox: px, oy: py, x: px, y: py, jumped: false }; touchHeld.set(e.pointerId, 'stick'); }
+    return;
+  }
   touchHeld.set(e.pointerId, b);
-  if (b === 'jump' || b === 'up') jumpDown();
+  if (b === 'jump') jumpDown();
   if (b === 'attack') shoot();
 });
 window.addEventListener('pointermove', e => {
-  if (!touchHeld.has(e.pointerId)) return;
-  const old = touchHeld.get(e.pointerId);
-  if (old !== 'left' && old !== 'right') return;
-  const [px, py] = toLocal(e); const b = hitButton(px, py);
-  if (b === 'left' || b === 'right') touchHeld.set(e.pointerId, b);
+  if (!stick || e.pointerId !== stick.id) return;
+  const [px, py] = toLocal(e);
+  let dx = px - stick.ox, dy = py - stick.oy; const d = Math.hypot(dx, dy);
+  if (d > STICK_R) { dx *= STICK_R / d; dy *= STICK_R / d; }
+  stick.x = stick.ox + dx; stick.y = stick.oy + dy;
+  // 往上推 = 跳
+  if (dy < -STICK_R * 0.7 && !stick.jumped) { stick.jumped = true; if (state === 'play') jumpDown(); }
+  else if (dy > -STICK_R * 0.4 && stick.jumped) { stick.jumped = false; release(); }
 });
 function pointerEnd(e) {
   if (e.pointerType === 'mouse') { mouseFire = false; return; }
   const b = touchHeld.get(e.pointerId); touchHeld.delete(e.pointerId);
-  if ((b === 'jump' || b === 'up') && !held('jump') && !held('up')) release();
+  if (b === 'stick') { if (stick && stick.jumped) release(); stick = null; }
+  if (b === 'jump' && !held('jump')) release();
 }
 window.addEventListener('pointerup', pointerEnd);
 window.addEventListener('pointercancel', pointerEnd);
-window.addEventListener('blur', () => { keys.left = keys.right = false; mouseFire = keyFire = false; touchHeld.clear(); release(); });
+window.addEventListener('blur', () => { keys.left = keys.right = false; mouseFire = keyFire = false; touchHeld.clear(); stick = null; release(); });
+// 擋掉 iOS 的放大鏡、選字、複製選單、雙指縮放等手勢
+for (const ev of ['touchstart', 'touchmove', 'touchend']) stage.addEventListener(ev, e => { if (e.target.closest && e.target.closest('button')) return; if (e.cancelable) e.preventDefault(); }, { passive: false });
+for (const ev of ['selectstart', 'gesturestart', 'gesturechange', 'dblclick']) document.addEventListener(ev, e => { if (e.target.closest && e.target.closest('.stage')) e.preventDefault(); });
 window.addEventListener('keydown', e => {
   const c = e.code;
   if (c === 'KeyA' || c === 'ArrowLeft') { keys.left = true; e.preventDefault(); }
@@ -876,7 +889,7 @@ function drawTitle() {
   drawImg(IMG.ghost, 690, 240 + bob, 80, { alpha: 0.85 });
   panel(390, 228, 250, 150);
   const lines = touchUI
-    ? ['左下十字鍵：走路', '右下：跳' + (isWiz() ? '、魔法' : ''), '按久一點跳更高', '踩怪物的頭也可以', '收集 3 顆星星！']
+    ? ['左半邊按住拖曳：走路', '右下：跳' + (isWiz() ? '、魔法' : ''), '按久一點跳更高', '踩怪物的頭也可以', '收集 3 顆星星！']
     : ['A D／← →：走路', '空白鍵或 W：跳', isWiz() ? '滑鼠左鍵：魔法星星' : '按久一點跳更高', '踩怪物的頭也可以', '收集 3 顆星星！'];
   lines.forEach((s, i) => text(s, 515, 252 + i * 26, 19, '#3a2a58', { stroke: 0, weight: 700 }));
   levelButton(W / 2 - 230, 1, true);
@@ -908,15 +921,25 @@ function drawControlsHint() {
 }
 
 function drawTouchControls() {
-  const pad = (k, label, on, size = 30) => {
+  // 搖桿：手指按住時才出現
+  if (stick) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,255,255,.14)'; ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(stick.ox, stick.oy, STICK_R, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.strokeStyle = 'rgba(255,255,255,.85)';
+    ctx.beginPath(); ctx.arc(stick.x, stick.y, 30, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.restore();
+  } else if (state === 'play' && stateT < 4) {
+    ctx.save(); ctx.globalAlpha = Math.min(1, (4 - stateT) / 0.8) * 0.8;
+    text('左半邊按住拖曳：走路（往上推也能跳）', W * 0.3, H - 40, 20, '#fff', { stroke: 5 }); ctx.restore();
+  }
+  const pad = (k, label, on, size) => {
     const b = BTN[k];
-    ctx.save(); ctx.globalAlpha = on ? 0.85 : 0.5;
-    ctx.fillStyle = on ? '#f6c453' : 'rgba(30,20,50,.75)'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
+    ctx.save();
+    ctx.fillStyle = on ? 'rgba(246,196,83,.5)' : 'rgba(255,255,255,.16)'; ctx.strokeStyle = on ? 'rgba(255,240,180,.95)' : 'rgba(255,255,255,.6)'; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.restore();
-    ctx.save(); ctx.globalAlpha = on ? 1 : 0.85; text(label, b.x, b.y + 1, size, '#fff', { stroke: 5 }); ctx.restore();
+    ctx.save(); ctx.globalAlpha = 0.9; text(label, b.x, b.y + 1, size, '#fff', { stroke: 4 }); ctx.restore();
   };
-  pad('left', '◀', inputLeft()); pad('right', '▶', inputRight());
-  pad('up', '▲', held('up'), 26); pad('down', '▼', false, 20);
   pad('jump', '跳', held('jump'), 30);
   if (isWiz()) pad('attack', '魔法', held('attack'), 22);
 }
