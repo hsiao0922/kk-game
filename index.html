@@ -83,7 +83,7 @@ header p { margin: 0; font-size: 14px; color: var(--mute); letter-spacing: .06em
   <div class="bar">
     <button id="btn-music" type="button">音樂：開</button>
     <button id="btn-full" type="button">全螢幕</button>
-    <span class="hint">小魔法師：點左半邊跳、右半邊放魔法星星（鍵盤：空白鍵跳、X 放星星）。手機橫放比較好玩。</span>
+    <span class="hint">電腦：A D 或方向鍵走、空白鍵跳、滑鼠左鍵放魔法星星。手機平板：左下十字鍵、右下跳和魔法按鈕，橫放比較好玩。</span>
   </div>
   <p class="credit">角色和故事：<b>小里肌（8 歲）</b>・主角小魔法師：小里肌本人（蠟筆風）・上色和補畫動作：Gemini・遊戲程式：Claude</p>
 </main>
@@ -259,7 +259,7 @@ let shots = []; // 小魔法師的魔法星星
 
 function reset(n = lvl) {
   lvl = n; SPEED = LEVELS[n].speed; END = LEVELS[n].end; falls = 0;
-  P = { x: 0, y: GROUND, vy: 0, onGround: true, inv: 0, hurtT: 0, coyote: 0, buffer: 0, walkT: 0, prevY: GROUND, castT: 0, cool: 0, ghostT: 0, tripleT: 0 };
+  P = { x: 0, y: GROUND, vy: 0, onGround: true, inv: 0, hurtT: 0, coyote: 0, buffer: 0, walkT: 0, prevY: GROUND, castT: 0, cool: 0, ghostT: 0, tripleT: 0, vx: 0, face: 1, prevX: 0 };
   shots = [];
   level = buildLevel(n); camX = 0; fishN = 0; starN = 0; stomps = 0; hearts = 3; score = 0;
   particles = []; popups = []; flash = 0; nextFlash = 5; B = null;
@@ -286,29 +286,80 @@ function press(px, py) {
     return;
   }
   if (state === 'over' && stateT > 1.0) { reset(lvl); setState('play'); return; }
-  if (state === 'play') {
-    if (isWiz() && px != null && px > W / 2) { shoot(); return; }
-    holding = true; P.buffer = 0.13;
-  }
+  if (state === 'play') jumpDown();
 }
+function jumpDown() { holding = true; P.buffer = 0.13; }
 function release() {
   holding = false;
   if (state === 'play' && P.vy < CUT_V) P.vy = CUT_V;
 }
+
+// 操作：桌機 A/D 或 ←/→ 移動、空白鍵/W/↑ 跳、滑鼠左鍵（按住連發）放魔法星星；
+// 手機平板：左下十字鍵移動（上 = 跳），右下「跳」「魔法」按鈕，可以多指同時按
+const keys = { left: false, right: false };
+const touchHeld = new Map(); // pointerId → 按鈕名稱
+let mouseFire = false, keyFire = false;
+let touchUI = window.matchMedia?.('(pointer: coarse)').matches || 'ontouchstart' in window;
+const BTN = {
+  left: { x: 78, y: 448, r: 46 }, right: { x: 222, y: 448, r: 46 }, up: { x: 150, y: 378, r: 42 }, down: { x: 150, y: 512, r: 34 },
+  attack: { x: 760, y: 462, r: 50 }, jump: { x: 876, y: 420, r: 60 },
+};
+function hitButton(px, py) {
+  for (const k in BTN) {
+    if (k === 'attack' && !isWiz()) continue;
+    const b = BTN[k]; if (Math.hypot(px - b.x, py - b.y) < b.r + 14) return k;
+  }
+  return null;
+}
+const held = name => [...touchHeld.values()].includes(name);
+const inputLeft = () => keys.left || held('left');
+const inputRight = () => keys.right || held('right');
+const wantFire = () => isWiz() && (mouseFire || keyFire || held('attack'));
+function toLocal(e) { const r = canvas.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * W, (e.clientY - r.top) / r.height * H]; }
+canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('pointerdown', e => {
   e.preventDefault();
-  const r = canvas.getBoundingClientRect();
-  press((e.clientX - r.left) / r.width * W, (e.clientY - r.top) / r.height * H);
+  const [px, py] = toLocal(e);
+  if (state !== 'play') { press(px, py); return; }
+  audioOn();
+  if (e.pointerType === 'mouse') { if (e.button === 0 && isWiz()) { mouseFire = true; shoot(); } return; }
+  touchUI = true;
+  const b = hitButton(px, py); if (!b) return;
+  touchHeld.set(e.pointerId, b);
+  if (b === 'jump' || b === 'up') jumpDown();
+  if (b === 'attack') shoot();
 });
-window.addEventListener('pointerup', release);
-window.addEventListener('pointercancel', release);
+window.addEventListener('pointermove', e => {
+  if (!touchHeld.has(e.pointerId)) return;
+  const old = touchHeld.get(e.pointerId);
+  if (old !== 'left' && old !== 'right') return;
+  const [px, py] = toLocal(e); const b = hitButton(px, py);
+  if (b === 'left' || b === 'right') touchHeld.set(e.pointerId, b);
+});
+function pointerEnd(e) {
+  if (e.pointerType === 'mouse') { mouseFire = false; return; }
+  const b = touchHeld.get(e.pointerId); touchHeld.delete(e.pointerId);
+  if ((b === 'jump' || b === 'up') && !held('jump') && !held('up')) release();
+}
+window.addEventListener('pointerup', pointerEnd);
+window.addEventListener('pointercancel', pointerEnd);
+window.addEventListener('blur', () => { keys.left = keys.right = false; mouseFire = keyFire = false; touchHeld.clear(); release(); });
 window.addEventListener('keydown', e => {
-  if (['Space', 'ArrowUp', 'KeyW', 'Enter'].includes(e.code)) { e.preventDefault(); if (!e.repeat) press(); }
-  else if (e.code === 'Digit2' && state === 'title') press(W / 2, 480);
-  else if (e.code === 'Digit3' && state === 'title') press(W - 100, 480);
-  else if (['KeyX', 'KeyF', 'ArrowRight'].includes(e.code) && state === 'play' && isWiz()) { e.preventDefault(); if (!e.repeat) shoot(); }
+  const c = e.code;
+  if (c === 'KeyA' || c === 'ArrowLeft') { keys.left = true; e.preventDefault(); }
+  else if (c === 'KeyD' || c === 'ArrowRight') { keys.right = true; e.preventDefault(); }
+  else if (['Space', 'ArrowUp', 'KeyW', 'Enter'].includes(c)) { e.preventDefault(); if (!e.repeat) press(); }
+  else if (['KeyJ', 'KeyX', 'KeyF'].includes(c) && state === 'play' && isWiz()) { e.preventDefault(); if (!e.repeat) { keyFire = true; shoot(); } }
+  else if (c === 'Digit2' && state === 'title') press(W / 2, 480);
+  else if (c === 'Digit3' && state === 'title') press(W - 100, 480);
 });
-window.addEventListener('keyup', e => { if (['Space', 'ArrowUp', 'KeyW', 'Enter'].includes(e.code)) release(); });
+window.addEventListener('keyup', e => {
+  const c = e.code;
+  if (c === 'KeyA' || c === 'ArrowLeft') keys.left = false;
+  else if (c === 'KeyD' || c === 'ArrowRight') keys.right = false;
+  else if (['Space', 'ArrowUp', 'KeyW', 'Enter'].includes(c)) release();
+  else if (['KeyJ', 'KeyX', 'KeyF'].includes(c)) keyFire = false;
+});
 
 const btnMusic = document.getElementById('btn-music');
 function syncMusic() { btnMusic.textContent = muted ? '音樂：關' : '音樂：開'; }
@@ -363,15 +414,15 @@ function shoot() {
   if (P.cool > 0 || P.inPit) return;
   P.cool = 0.32; P.castT = 0.25;
   const spread = P.tripleT > 0 ? [-170, 0, 170] : [0];
-  for (const vy of spread) shots.push({ x: P.x + 46, y: P.y - 84, vy, life: 1.2 });
+  for (const vy of spread) shots.push({ x: P.x + 46 * P.face, y: P.y - 84, vy, dir: P.face, life: 1.2 });
   tone('triangle', 900, 1500, 0.12, 0.12); tone('sine', 1800, 2400, 0.1, 0.06, 0.05);
 }
 function updateShots(dt) {
   for (const s of shots) {
-    s.x += 780 * dt; s.y += (s.vy || 0) * dt; s.life -= dt;
-    if (Math.random() < 0.6) particles.push({ x: s.x - 30, y: s.y + (Math.random() - .5) * 16, vx: -60, vy: (Math.random() - .5) * 40,
+    s.x += 780 * (s.dir || 1) * dt; s.y += (s.vy || 0) * dt; s.life -= dt;
+    if (Math.random() < 0.6) particles.push({ x: s.x - 30 * (s.dir || 1), y: s.y + (Math.random() - .5) * 16, vx: -60, vy: (Math.random() - .5) * 40,
       life: 0.35, c: ['#ffe27a', '#ff9fb0', '#9be3ff', '#c58bff'][Math.floor(Math.random() * 4)], s: 5, confetti: true });
-    if (s.x > camX + W + 60) s.life = 0;
+    if (s.x > camX + W + 60 || s.x < camX - 60) s.life = 0;
     const box = { l: s.x - 22, r: s.x + 22, t: s.y - 18, b: s.y + 18 };
     for (const e of level) {
       if (s.life <= 0) break;
@@ -425,10 +476,23 @@ function update(dt) {
 }
 
 function updatePlay(dt) {
-  if (P.x < END && !P.inPit) P.x = Math.min(END, P.x + SPEED * dt);
-  camX = Math.min(P.x - PX, END - PX);
+  // 自由左右走動
+  const dir = (inputRight() ? 1 : 0) - (inputLeft() ? 1 : 0);
+  if (dir) P.face = dir;
+  P.prevX = P.x;
+  if (!P.inPit) {
+    P.vx += (dir * SPEED - P.vx) * Math.min(1, dt * (dir ? 10 : 14));
+    P.x += P.vx * dt;
+  } else P.vx = 0;
+  const minX = B ? END - PX + 40 : 30;
+  if (P.x < minX) { P.x = minX; P.vx = 0; }
+  if (P.x > END) { P.x = END; P.vx = Math.min(0, P.vx); }
+  const camTarget = B ? END - PX : Math.max(0, Math.min(P.x - 380, END - PX));
+  camX += (camTarget - camX) * Math.min(1, dt * 8);
   P.inv = Math.max(0, P.inv - dt); P.hurtT = Math.max(0, P.hurtT - dt);
-  P.buffer -= dt; P.coyote = P.onGround ? 0.1 : P.coyote - dt; P.walkT += dt;
+  P.buffer -= dt; P.coyote = P.onGround ? 0.1 : P.coyote - dt;
+  if (Math.abs(P.vx) > 30) P.walkT += dt * Math.abs(P.vx) / SPEED;
+  if (wantFire() && P.cool <= 0) shoot();
   P.cool = Math.max(0, P.cool - dt); P.castT = Math.max(0, P.castT - dt);
   P.ghostT = Math.max(0, P.ghostT - dt); P.tripleT = Math.max(0, P.tripleT - dt);
   updateShots(dt);
@@ -444,7 +508,8 @@ function updatePlay(dt) {
     const pt = level.find(e => e.t === 'pit' && Math.abs(P.x - e.x) < e.w);
     falls++; hurt(true);
     if (state !== 'play') return;
-    P.x = (pt ? pt.x + pt.w / 2 + 50 : P.x + 120); P.y = GROUND - 240; P.vy = 0; P.prevY = P.y; P.inPit = false;
+    const side = P.face >= 0 ? 1 : -1;
+    P.x = pt ? pt.x + side * (pt.w / 2 + 50) : P.x + 120 * side; P.y = GROUND - 240; P.vy = 0; P.vx = 0; P.prevY = P.y; P.inPit = false;
   }
 
   const pb = pBox();
@@ -454,7 +519,10 @@ function updatePlay(dt) {
       const top = GROUND - e.h, l = e.x - e.w / 2, r = e.x + e.w / 2;
       if (pb.r - 6 > l && pb.l + 6 < r) {
         if (P.vy >= 0 && P.prevY <= top + 6 && P.y >= top) { P.y = top; P.vy = 0; P.onGround = true; }
-        else if (P.y > top + 10 && !e.hit) { e.hit = true; hurt(); }
+        else if (P.y > top + 10) {
+          // 木箱是牆：從哪邊撞就被擋在哪邊
+          P.x = P.prevX <= e.x ? l - 20 : r + 20; P.vx = 0;
+        }
       }
     } else if (e.t === 'circle') {
       continue;
@@ -693,7 +761,7 @@ function drawLevel3End() {
   const jx0 = END + 230 - camX, t = stateT;
   if (t < 2.8) {
     drawImg(IMG.jiao_1, jx0, GROUND + 2, CHAR_H);
-    if (t > 0.3 && t < 1.6) bubble(PX + 50, GROUND - CHAR_H - 8, 'Are you ok?', 24);
+    if (t > 0.3 && t < 1.6) bubble(P.x - camX + 50, GROUND - CHAR_H - 8, 'Are you ok?', 24);
     if (t > 1.5 && t < 2.8) bubble(jx0 + 30, GROUND - CHAR_H - 8, 'I… fine.', 24);
   } else if (t < 4.2) {
     drawImg(IMG.jiao_2, jx0 + (t - 2.8) * 520, GROUND + 2 - Math.abs(Math.sin(t * 14)) * 10, CHAR_H);
@@ -705,7 +773,7 @@ function drawLevel3End() {
     g.addColorStop(0, '#c58bff'); g.addColorStop(1, 'rgba(197,139,255,0)');
     ctx.fillStyle = g; ctx.fillRect(cx - 160, GROUND - 220, 320, 260); ctx.restore();
     drawImg(IMG.jiao_3, cx, GROUND + 10, CHAR_H * 1.05, { alpha: a });
-    if (t > 3.9) bubble(PX + 40, GROUND - CHAR_H - 8, '!?', 30);
+    if (t > 3.9) bubble(P.x - camX + 40, GROUND - CHAR_H - 8, '!?', 30);
   }
 }
 
@@ -719,11 +787,12 @@ function drawPlayer() {
   else if (!P.onGround) im = P.castT > 0 && h.cast ? IMG[h.cast] : IMG[h.jump];
   else if (B && P.x >= END) im = IMG[h.stand];
   else if (P.castT > 0 && h.cast) im = IMG[h.cast];
+  else if (Math.abs(P.vx) < 30) im = IMG[h.stand];
   else im = Math.floor(P.walkT * 8) % 2 ? IMG[h.w1] : IMG[h.w2];
   let bottom = P.y;
   if (state === 'win') bottom = GROUND - Math.abs(Math.sin(stateT * 6 + 0.7)) * 36;
-  const tilt = P.onGround && state === 'play' ? Math.sin(P.walkT * 16) * 0.04 : 0;
-  drawImg(im, sx, bottom + 2, CHAR_H, { rot: tilt, alpha: P.ghostT > 0 ? 0.4 + 0.15 * Math.sin(totalT * 10) : undefined });
+  const tilt = P.onGround && state === 'play' && Math.abs(P.vx) > 30 ? Math.sin(P.walkT * 16) * 0.04 : 0;
+  drawImg(im, sx, bottom + 2, CHAR_H, { rot: tilt, flip: P.face < 0 && state === 'play', alpha: P.ghostT > 0 ? 0.4 + 0.15 * Math.sin(totalT * 10) : undefined });
 }
 
 function drawHUD() {
@@ -773,8 +842,9 @@ function drawTitle() {
   drawImg(IMG.monster_front, 815, 420, 180, { rot: Math.sin(totalT * 1.7) * 0.08 });
   drawImg(IMG.ghost, 690, 240 + bob, 80, { alpha: 0.85 });
   panel(390, 228, 250, 150);
-  const lines = isWiz() ? ['點左半邊：跳', '點右半邊：魔法星星', '按久一點跳更高', '收集 3 顆星星', '去找容容！']
-    : ['點一下就跳', '按久一點跳更高', '踩怪物貓的頭', '收集 3 顆星星', '去找容容！'];
+  const lines = touchUI
+    ? ['左下十字鍵：走路', '右下：跳' + (isWiz() ? '、魔法' : ''), '按久一點跳更高', '踩怪物的頭也可以', '收集 3 顆星星！']
+    : ['A D／← →：走路', '空白鍵或 W：跳', isWiz() ? '滑鼠左鍵：魔法星星' : '按久一點跳更高', '踩怪物的頭也可以', '收集 3 顆星星！'];
   lines.forEach((s, i) => text(s, 515, 252 + i * 26, 19, '#3a2a58', { stroke: 0, weight: 700 }));
   levelButton(W / 2 - 230, 1, true);
   levelButton(W / 2, 2, unlocked2);
@@ -795,15 +865,27 @@ function levelButton(cx, n, open) {
 }
 
 function drawControlsHint() {
-  if (!isWiz() || state !== 'play' || stateT > 4.5) return;
-  const a = Math.min(1, (4.5 - stateT) / 0.8) * 0.85;
-  ctx.save(); ctx.globalAlpha = a; ctx.setLineDash([10, 8]); ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.moveTo(W / 2, 150); ctx.lineTo(W / 2, H - 20); ctx.stroke(); ctx.restore();
+  if (state !== 'play') return;
+  if (touchUI) drawTouchControls();
+  if (stateT > 5 || touchUI) return;
+  const a = Math.min(1, (5 - stateT) / 0.8) * 0.9;
   ctx.save(); ctx.globalAlpha = a;
-  text('點這邊：跳', W / 4, 300, 30, '#fff', { stroke: 7 });
-  text('點這邊：魔法星星', W * 0.75, 300, 30, '#ffe27a', { stroke: 7 });
-  text('鍵盤：空白鍵跳、X 鍵放星星', W / 2, H - 40, 18, '#efe6ff', { stroke: 5 });
+  text(isWiz() ? 'A D 或 ← → 移動　空白鍵跳　滑鼠左鍵放魔法星星' : 'A D 或 ← → 移動　空白鍵跳', W / 2, H - 34, 22, '#fff', { stroke: 6 });
   ctx.restore();
+}
+
+function drawTouchControls() {
+  const pad = (k, label, on, size = 30) => {
+    const b = BTN[k];
+    ctx.save(); ctx.globalAlpha = on ? 0.85 : 0.5;
+    ctx.fillStyle = on ? '#f6c453' : 'rgba(30,20,50,.75)'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.restore();
+    ctx.save(); ctx.globalAlpha = on ? 1 : 0.85; text(label, b.x, b.y + 1, size, '#fff', { stroke: 5 }); ctx.restore();
+  };
+  pad('left', '◀', inputLeft()); pad('right', '▶', inputRight());
+  pad('up', '▲', held('up'), 26); pad('down', '▼', false, 20);
+  pad('jump', '跳', held('jump'), 30);
+  if (isWiz()) pad('attack', '魔法', held('attack'), 22);
 }
 
 function drawBanner() {
@@ -846,7 +928,7 @@ function render() {
   drawBg();
   if (state !== 'title') {
     drawEntities(); drawFriends(); drawPlayer();
-    for (const s of shots) drawImg(IMG.magic_star, s.x - camX, s.y + 28, 56, { rot: Math.sin(totalT * 20) * 0.08 });
+    for (const s of shots) drawImg(IMG.magic_star, s.x - camX, s.y + 28, 56, { rot: Math.sin(totalT * 20) * 0.08, flip: s.dir < 0 });
     drawControlsHint();
   }
   for (const p of particles) {
