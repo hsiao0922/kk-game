@@ -6,8 +6,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="顆顆闖鬼屋">
-<title>顆顆闖鬼屋</title>
+<meta name="apple-mobile-web-app-title" content="小小魔法師">
+<title>小小魔法師闖鬼屋</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chiron+GoRound+TC:wght@400;700;900&display=swap">
@@ -96,11 +96,11 @@ body.pseudo-full .exit-full {
 
 <main>
   <header>
-    <h1>顆顆闖鬼屋</h1>
+    <h1>小小魔法師闖鬼屋</h1>
     <p>小里肌的漫畫小遊戲・共 3 關</p>
   </header>
   <div class="stage" id="stage">
-    <canvas id="game" aria-label="顆顆闖鬼屋遊戲畫面"></canvas>
+    <canvas id="game" aria-label="小小魔法師闖鬼屋遊戲畫面"></canvas>
     <p class="rotate-hint">把手機轉成橫的，畫面會更大</p>
     <button class="exit-full" id="btn-exit-full" type="button">✕ 離開</button>
   </div>
@@ -109,7 +109,7 @@ body.pseudo-full .exit-full {
     <button id="btn-full" type="button">全螢幕</button>
     <span class="hint">電腦：A D 或方向鍵走、空白鍵跳、滑鼠左鍵放魔法星星。手機平板：左半邊按住拖曳走路、右下跳和魔法按鈕，橫放比較好玩。</span>
   </div>
-  <p class="credit">角色和故事：<b>小里肌（8 歲）</b>・主角小魔法師：小里肌本人（蠟筆風）・上色和補畫動作：Gemini・遊戲程式：Claude</p>
+  <p class="credit">角色和故事：<b>小里肌（8 歲）</b>・主角小小魔法師：小里肌本人（蠟筆風）・上色和補畫動作：Gemini・遊戲程式：Claude</p>
 </main>
 
 <script>
@@ -132,7 +132,7 @@ const stage = document.getElementById('stage');
 
 // ---------- 素材 ----------
 const NAMES = ['kk_1','kk_2','kk_3','kk_4','kk_5','kk_front','mon_1','mon_2','mon_3','mon_4','monster_front',
-  'rongrong','jiaojiao','dog','fish','heart','star','ghost','pumpkin','crate',
+  'rongrong','dog','fish','heart','star','ghost','pumpkin','crate',
   'keli_1','keli_2','keli_3','keli_4','keli_5','bear_1','bear_2','bear_3','bear_4','jiao_1','jiao_2','jiao_3','candle','spirit','circle',
   'wiz_stand','wiz_w1','wiz_w2','wiz_jump','wiz_hurt','wiz_wave','wiz_cast','magic_star','item_book','item_vase','item_box'];
 const IMG = {};
@@ -510,6 +510,7 @@ function update(dt) {
 
   if (state === 'title') { camX += 40 * dt; return; }
   if (state === 'play') updatePlay(dt);
+  if (state === 'win') camX += (END - PX - camX) * Math.min(1, dt * 6);
   if (state === 'win' && Math.random() < 0.5) {
     particles.push({ x: camX + Math.random() * W, y: -10, vx: (Math.random() - .5) * 60, vy: 120 + Math.random() * 120,
       life: 3, c: ['#f6c453', '#f08a24', '#7ad3ff', '#ff7aa8', '#9be36b'][Math.floor(Math.random() * 5)], s: 6 + Math.random() * 5, confetti: true });
@@ -755,23 +756,42 @@ function drawEntities() {
   }
 }
 
+// 角色頭上的名字牌
+function nameTag(name, cx, headTop) {
+  ctx.save();
+  ctx.font = `900 17px ${FONT}`;
+  const w = ctx.measureText(name).width + 18, y = headTop - 16;
+  ctx.fillStyle = 'rgba(255,253,246,.9)'; ctx.strokeStyle = 'rgba(27,21,48,.85)'; ctx.lineWidth = 2;
+  roundRect(cx - w / 2, y - 12, w, 24, 12); ctx.fill(); ctx.stroke();
+  ctx.restore();
+  text(name, cx, y + 1, 17, '#3a2a58', { stroke: 0 });
+}
+// 畫一個有名字的朋友
+function friend(img, name, cx, lift = 0, h = CHAR_H, opt = {}) {
+  drawImg(img, cx, GROUND + 2 - lift, h, opt);
+  if (name) nameTag(name, cx, GROUND - lift - h + 4);
+}
+
 function drawFriends() {
   if (lvl === 3) { drawLevel3End(); return; }
   const base = END - camX;
   if (base + 250 > W + 200) return;
   const hopY = (k, amp) => state === 'win' ? Math.abs(Math.sin(stateT * 6 + k)) * amp : 0;
   if (lvl === 1) {
-    const rx = base + 250, jx = base + 360;
-    drawImg(IMG.rongrong, rx, GROUND - hopY(0, 40), CHAR_H);
-    drawImg(IMG.jiaojiao, jx, GROUND - hopY(1.4, 30), CHAR_H);
-    if (state === 'win' && stateT > 0.4) bubble(rx + 40, GROUND - CHAR_H - 8 - hopY(0, 40), 'Be happy!', 28);
+    // 第 1 關終點：容容、角角，小魔法師模式還有顆顆
+    const rx = base + 240, jx = base + 345, kx = base + 450;
+    friend(IMG.rongrong, '容容', rx, hopY(0, 40));
+    friend(IMG.jiao_1, '角角', jx, hopY(1.4, 30));
+    if (isWiz()) friend(IMG.kk_front, '顆顆', kx, hopY(2.6, 34));
+    if (state === 'win' && stateT > 0.4) bubble(rx + 40, GROUND - CHAR_H - 30 - hopY(0, 40), 'Be happy!', 26);
   } else {
     // 第 2 關：大狗擋在前面大喊 No，怪物貓嚇得逃走，容容和角角在後面跳
-    const dx = base + 230, rx = base + 380, jx = base + 480;
-    drawImg(IMG.rongrong, rx, GROUND - hopY(0, 40), CHAR_H * 0.92);
-    drawImg(IMG.jiaojiao, jx, GROUND - hopY(1.4, 30), CHAR_H * 0.92);
+    const dx = base + 230, rx = base + 370, jx = base + 460, kx = base + 550;
+    friend(IMG.rongrong, '容容', rx, hopY(0, 40), CHAR_H * 0.92);
+    friend(IMG.jiao_1, '角角', jx, hopY(1.4, 30), CHAR_H * 0.92);
+    if (isWiz()) friend(IMG.kk_front, '顆顆', kx, hopY(2.6, 34), CHAR_H * 0.92);
     const shake = state === 'win' && stateT < 1.2 ? Math.sin(stateT * 50) * 4 : 0;
-    drawImg(IMG.dog, dx + shake, GROUND + 2, CHAR_H * 1.25);
+    friend(IMG.dog, '大狗', dx + shake, 0, CHAR_H * 1.25);
     if (state === 'win') {
       bubble(dx - 62, GROUND - 92, 'No!', 34);
       for (let i = 0; i < 3; i++) {
@@ -789,6 +809,7 @@ function drawLevel3End() {
   if (B.mode === 'free' || state === 'win') {
     const wob = Math.sin(totalT * 5) * 0.08;
     drawImg(IMG.rongrong, bx, GROUND + 2, CHAR_H, { rot: wob });
+    nameTag('容容', bx, GROUND - CHAR_H + 4);
     if (state !== 'win' || stateT < 1.2) for (let i = 0; i < 3; i++) {
       const a = totalT * 4 + i * 2.1;
       drawImg(IMG.star, bx + Math.cos(a) * 34, GROUND - CHAR_H - 2 + Math.sin(a) * 8, 18);
@@ -805,12 +826,15 @@ function drawLevel3End() {
   if (state !== 'win') return;
   // 結局：照漫畫 3ch 的對話
   const jx0 = END + 230 - camX, t = stateT;
+  // 小魔法師模式：顆力跑來站在旁邊，由顆力問「Are you ok?」（照漫畫）；貓咪模式主角就是顆力
+  const kx = isWiz() ? P.x - camX - 75 : P.x - camX;
+  if (isWiz()) friend(IMG.keli_1, '顆力', kx);
   if (t < 2.8) {
-    drawImg(IMG.jiao_1, jx0, GROUND + 2, CHAR_H);
-    if (t > 0.3 && t < 1.6) bubble(P.x - camX + 50, GROUND - CHAR_H - 8, 'Are you ok?', 24);
-    if (t > 1.5 && t < 2.8) bubble(jx0 + 30, GROUND - CHAR_H - 8, 'I… fine.', 24);
+    friend(IMG.jiao_1, '角角', jx0);
+    if (t > 0.3 && t < 1.6) bubble(kx + 50, GROUND - CHAR_H - 44, 'Are you ok?', 22);
+    if (t > 1.5 && t < 2.8) bubble(jx0 + 30, GROUND - CHAR_H - 44, 'I… fine.', 22);
   } else if (t < 4.2) {
-    drawImg(IMG.jiao_2, jx0 + (t - 2.8) * 520, GROUND + 2 - Math.abs(Math.sin(t * 14)) * 10, CHAR_H);
+    friend(IMG.jiao_2, '角角', jx0 + (t - 2.8) * 520, Math.abs(Math.sin(t * 14)) * 10);
   }
   if (t > 3.4) {
     const a = Math.min(1, (t - 3.4) / 0.6), cx = W - 120;
@@ -819,7 +843,8 @@ function drawLevel3End() {
     g.addColorStop(0, '#c58bff'); g.addColorStop(1, 'rgba(197,139,255,0)');
     ctx.fillStyle = g; ctx.fillRect(cx - 160, GROUND - 220, 320, 260); ctx.restore();
     drawImg(IMG.jiao_3, cx, GROUND + 10, CHAR_H * 1.05, { alpha: a });
-    if (t > 3.9) bubble(P.x - camX + 40, GROUND - CHAR_H - 8, '!?', 30);
+    if (a > 0.6) nameTag('角角？', cx, GROUND + 10 - CHAR_H * 1.05 + 6);
+    if (t > 3.9) bubble(kx + 40, GROUND - CHAR_H - 44, '!?', 28);
   }
 }
 
@@ -839,6 +864,7 @@ function drawPlayer() {
   if (state === 'win') bottom = GROUND - Math.abs(Math.sin(stateT * 6 + 0.7)) * 36;
   const tilt = P.onGround && state === 'play' && Math.abs(P.vx) > 30 ? Math.sin(P.walkT * 16) * 0.04 : 0;
   drawImg(im, sx, bottom + 2, CHAR_H, { rot: tilt, flip: P.face < 0 && state === 'play', alpha: P.ghostT > 0 ? 0.4 + 0.15 * Math.sin(totalT * 10) : undefined });
+  if (!isWiz()) nameTag(lvl === 3 ? '顆力' : '顆顆', sx, bottom - CHAR_H + 6);
 }
 
 function drawHUD() {
@@ -879,14 +905,20 @@ function panel(x, y, w, h) {
 function drawTitle() {
   overlay(0.35);
   const bob = Math.sin(totalT * 3) * 8;
-  text('顆顆闖鬼屋', W / 2, 108, 76, '#f6c453', { stroke: 12 });
+  text('小小魔法師闖鬼屋', W / 2, 108, 66, '#f6c453', { stroke: 12 });
   text('小里肌的漫畫小遊戲・共 3 關', W / 2, 170, 24, '#efe6ff', { stroke: 6 });
   drawImg(isWiz() ? IMG.wiz_wave : IMG.kk_front, 150, 420 + bob * 0.3, 210, { rot: Math.sin(totalT * 2.4) * 0.05 });
   ctx.save(); ctx.fillStyle = 'rgba(255,250,236,.92)'; ctx.strokeStyle = '#1b1530'; ctx.lineWidth = 4;
   roundRect(16, 16, 280, 52, 26); ctx.fill(); ctx.stroke(); ctx.restore();
   text('主角：' + (isWiz() ? '小魔法師' : '貓咪') + '　點這裡換', 156, 42, 20, '#3a2a58', { stroke: 0 });
-  drawImg(IMG.monster_front, 815, 420, 180, { rot: Math.sin(totalT * 1.7) * 0.08 });
-  drawImg(IMG.ghost, 690, 240 + bob, 80, { alpha: 0.85 });
+  drawImg(IMG.ghost, 710, 236 + bob, 70, { alpha: 0.85 });
+  // 登場角色：顆顆、顆力、角角、容容
+  const crew = [['kk_front', '顆顆'], ['keli_1', '顆力'], ['jiao_1', '角角'], ['rongrong', '容容']];
+  crew.forEach(([k, n], i) => {
+    const cx = 690 + i * 70, jump = Math.abs(Math.sin(totalT * 3 + i * 0.9)) * 6, hh = 118;
+    drawImg(IMG[k], cx, 424 - jump, hh);
+    nameTag(n, cx, 424 - jump - hh + 4);
+  });
   panel(390, 228, 250, 150);
   const lines = touchUI
     ? ['左半邊按住拖曳：走路', '右下：跳' + (isWiz() ? '、魔法' : ''), '按久一點跳更高', '踩怪物的頭也可以', '收集 3 顆星星！']
