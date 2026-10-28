@@ -1,0 +1,31 @@
+{
+  "name": "小小魔法師闖鬼屋",
+  "short_name": "小小魔法師",
+  "lang": "zh-Hant",
+  "start_url": "./?shortcut",
+  "scope": "./",
+  "display": "browser",
+  "orientation": "any",
+  "background_color": "#1b1530",
+  "theme_color": "#1b1530",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

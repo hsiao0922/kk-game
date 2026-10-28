@@ -8,7 +8,15 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="小小魔法師闖鬼屋">
 <meta name="theme-color" content="#1b1530">
-<link rel="manifest" href="manifest.webmanifest">
+<link rel="manifest" href="manifest.webmanifest" id="mf">
+<script>
+// 網址加 ?shortcut：改用瀏覽器模式的 manifest（不算可安裝的 App，Chrome 只會給「新增至主畫面」捷徑）。
+// 給沒有 Google 服務的 Android 平板用：那種平板「安裝應用程式」會失敗（顯示「無法安裝」）。一般網址不受影響。
+if (/[?&]shortcut(=|&|$)/.test(location.search)) {
+  document.getElementById('mf').href = 'manifest-shortcut.webmanifest';
+  var m = document.querySelector('meta[name="mobile-web-app-capable"]'); if (m) m.remove();
+}
+</script>
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>小小魔法師闖鬼屋</title>
@@ -119,7 +127,7 @@ body.pseudo-full .exit-full {
 (() => {
 'use strict';
 // 版本號：每次改遊戲（新增關卡、修正、換素材）都要加；加入主畫面的玩家靠它判斷要不要更新
-const VERSION = '1.0.2';
+const VERSION = '1.0.3';
 const W = 960, H = 540, GROUND = 488, PX = 210;
 const GRAV = 2300, JUMP_V = -900, CUT_V = -380;
 const LEVELS = {
@@ -1077,7 +1085,8 @@ function applyUpdate() {
   try { tried = sessionStorage.getItem('kk_upd'); } catch (e) {}
   if (tried === pendingUpdate) return;   // 已經重新載入過還是舊的（快取），不要一直重載
   try { sessionStorage.setItem('kk_upd', pendingUpdate); } catch (e) {}
-  location.replace(location.pathname + '?v=' + encodeURIComponent(pendingUpdate));
+  const q = new URLSearchParams(location.search); q.set('v', pendingUpdate);   // 保留其他參數（例如 shortcut）
+  location.replace(location.pathname + '?' + q.toString());
 }
 if (STANDALONE) {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').then(reg => { swReg = reg; }).catch(() => {});
