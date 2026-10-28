@@ -4,11 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="小小魔法師闖鬼屋">
 <meta name="theme-color" content="#1b1530">
-<link rel="manifest" href="manifest.webmanifest">
+<link rel="manifest" href="manifest.webmanifest" id="mf">
+<script>
+// Android：主畫面圖示改成用 Chrome 分頁開啟（部分平板的省電機制會擋掉獨立視窗，導致卡在 logo）；iPhone／iPad 維持獨立視窗
+if (/Android/i.test(navigator.userAgent)) document.getElementById('mf').href = 'manifest-android.webmanifest';
+</script>
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>小小魔法師闖鬼屋</title>
@@ -119,7 +122,7 @@ body.pseudo-full .exit-full {
 (() => {
 'use strict';
 // 版本號：每次改遊戲（新增關卡、修正、換素材）都要加；加入主畫面的玩家靠它判斷要不要更新
-const VERSION = '1.0.0';
+const VERSION = '1.0.1';
 const W = 960, H = 540, GROUND = 488, PX = 210;
 const GRAV = 2300, JUMP_V = -900, CUT_V = -380;
 const LEVELS = {
