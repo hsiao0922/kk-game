@@ -8,16 +8,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="小小魔法師闖鬼屋">
 <meta name="theme-color" content="#1b1530">
-<link rel="manifest" href="manifest.webmanifest" id="mf">
-<script>
-// 網址加 ?shortcut：改用瀏覽器模式的 manifest（不算可安裝的 App，Chrome 只會給「新增至主畫面」捷徑）。
-// 給沒有 Google 服務的 Android 平板用：那種平板「安裝應用程式」會失敗（顯示「無法安裝」）。一般網址不受影響。
-if (/[?&]shortcut(=|&|$)/.test(location.search)) {
-  document.getElementById('mf').href = 'manifest-shortcut.webmanifest';
-  var m = document.querySelector('meta[name="mobile-web-app-capable"]'); if (m) m.remove();
-}
-</script>
+<meta name="lw-standalone" content="1">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>小小魔法師闖鬼屋</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -127,7 +120,7 @@ body.pseudo-full .exit-full {
 (() => {
 'use strict';
 // 版本號：每次改遊戲（新增關卡、修正、換素材）都要加；加入主畫面的玩家靠它判斷要不要更新
-const VERSION = '1.0.3';
+const VERSION = '1.0.4';
 const W = 960, H = 540, GROUND = 488, PX = 210;
 const GRAV = 2300, JUMP_V = -900, CUT_V = -380;
 const LEVELS = {
@@ -1065,8 +1058,8 @@ function resize() {
 new ResizeObserver(resize).observe(canvas);
 document.addEventListener('visibilitychange', () => { if (document.hidden) bgm.pause(); else if (state !== 'title' && !muted && ac) bgm.play().catch(() => {}); });
 
-// ---------- 版本檢查與自動更新（有 manifest 的獨立版才啟用）----------
-const STANDALONE = !!document.querySelector('link[rel="manifest"]');
+// ---------- 版本檢查與自動更新（獨立版才啟用）----------
+const STANDALONE = !!document.querySelector('meta[name="lw-standalone"]');   // 獨立版（GitHub）才有這個記號
 let pendingUpdate = null, swReg = null;
 async function checkUpdate() {
   if (!STANDALONE) return;
